@@ -68,6 +68,15 @@
       if (etat === 'fini' || etat === 'erreur') { setTimeout(function () { if (cartes[slug] === c) { c.remove(); delete cartes[slug]; } }, 20000); }
     }
   };
+  /* boutons du launcher (Installer, Jouer, Désinstaller…) : envoyés directement au programme */
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href^="retrogems://"]') : null; if (!a) return;
+    var I = window.__TAURI_INTERNALS__; if (!I || !I.invoke) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    var h = a.getAttribute('href');
+    if (/^retrogems:\/\/installer\//.test(h) && window.rglApp) { window.rglApp.progres(decodeURIComponent(h.split('/').pop()), a.getAttribute('data-rgl-titre') || '', 'preparation', 0, ''); }
+    I.invoke('lien', { url: h }).catch(function () { location.href = h; });
+  }, true);
   /* liens externes (GitHub, sites des projets) : dans le navigateur de l'ordinateur ; liens du site : dans le launcher */
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[href]') : null; if (!a) return;

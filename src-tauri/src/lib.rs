@@ -537,6 +537,14 @@ fn lancer_jeu(i: &Installe) -> Result<(), String> {
     Command::new(&p).args(&i.args).current_dir(dir).spawn().map(|_| ()).map_err(es)
 }
 
+/// Appelée par la page (bouton Installer, Jouer…) : plus fiable qu'une navigation vers retrogems:// dans WebView2.
+#[tauri::command]
+fn lien(app: AppHandle, url: String) {
+    if let Ok(u) = url.parse::<Url>() {
+        gerer_lien(&app, &u);
+    }
+}
+
 /* ---------------------------------------------------------------- démarrage */
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -549,6 +557,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
+        .invoke_handler(tauri::generate_handler![lien])
         .setup(|app| {
             let _ = fs::create_dir_all(dossier_jeux());
             let h = app.handle().clone();
