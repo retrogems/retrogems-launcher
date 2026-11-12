@@ -3,7 +3,9 @@
    transforme « Installer » en « Jouer » pour les jeux installés et ouvre les liens externes dans le navigateur. */
 (function () {
   if (!/(^|\.)retrogems\.fr$/.test(location.hostname)) return;
+  if (window.__rglAppScript) return; window.__rglAppScript = 1;   /* v0.1.3 : le programme peut relancer ce script en fin de chargement */
   window.RGL_APP = true;
+  try { document.documentElement.classList.add('rg-app'); document.cookie = 'rgapp=1; path=/; max-age=31536000; SameSite=Lax; Secure'; } catch (x) {}
   var L = (document.documentElement.getAttribute('lang') || navigator.language || 'fr').slice(0, 2);
   var T = function (fr, en, es) { return L === 'fr' ? fr : (L === 'es' ? es : en); };
   var css = '#retrogems-header,.rghd-wrap,#retrogems-footer,#rg-mobile-nav,.rg-pwa-feuille,#rg-mobile-panel{display:none!important}'
@@ -12,7 +14,7 @@
     + '.rgapp-c{background:linear-gradient(160deg,#151b24,#0d1117);border:1px solid rgba(0,255,255,.4);border-radius:14px;padding:14px 16px;color:#e0e0e0;box-shadow:0 0 24px rgba(0,255,255,.18),0 18px 40px rgba(0,0,0,.6)}'
     + '.rgapp-c b{display:block;color:#fff;margin-bottom:4px}.rgapp-c p{margin:4px 0 0;font-size:.85rem;color:#c9d1d9;line-height:1.45}'
     + '.rgapp-b{height:6px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}.rgapp-b i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00ffff,#ff00ff);transition:width .3s}'
-    + '.rgapp-c.ko{border-color:#ff5c7a}.rgapp-c.ok{border-color:#ff00ff}.rgapp-x{float:right;background:none;border:none;color:#8b949e;cursor:pointer;font-size:14px}'
+    + '.rgapp-c.ko{border-color:#ff5c7a}.rgapp-c.ok{border-color:#ff00ff}.rgapp-c{position:relative;padding-right:52px!important}.rgapp-x{position:absolute!important;top:10px;right:10px;width:30px!important;height:30px!important;min-width:0!important;padding:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:50%!important;border:1px solid rgba(0,255,255,.6)!important;background:#0d1117!important;color:#fff!important;font-size:0!important;line-height:0!important;cursor:pointer}.rgapp-x svg{width:12px;height:12px;display:block;stroke:#fff}.rgapp-x:hover{background:rgba(0,255,255,.15)!important}'
     + '.rgapp-mes{position:fixed;left:18px;bottom:18px;z-index:2147482999;display:none;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid #ff00ff;background:rgba(13,17,23,.92);color:#ffb3ff;font:700 .9rem Quicksand,sans-serif;cursor:pointer;box-shadow:0 0 16px rgba(255,0,255,.35)}'
     + '.rgapp-panneau{position:fixed;left:18px;bottom:70px;z-index:2147482999;width:min(380px,calc(100vw - 36px));max-height:60vh;overflow:auto;display:none;background:#0d1117;border:1px solid rgba(255,0,255,.5);border-radius:14px;padding:12px;box-shadow:0 18px 40px rgba(0,0,0,.6)}'
     + '.rgapp-panneau.on{display:block}.rgapp-l{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,.06);color:#e0e0e0}.rgapp-l span{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
@@ -61,7 +63,7 @@
       if (!c) { c = document.createElement('div'); c.className = 'rgapp-c'; boite.appendChild(c); cartes[slug] = c; }
       var lib = { preparation: T('Préparation', 'Preparing', 'Preparando'), telechargement: T('Téléchargement', 'Downloading', 'Descargando'), installation: T('Installation', 'Installing', 'Instalando'), fini: T('Prêt à jouer', 'Ready to play', 'Listo para jugar'), erreur: T('Problème', 'Problem', 'Problema') }[etat] || etat;
       c.className = 'rgapp-c' + (etat === 'erreur' ? ' ko' : (etat === 'fini' ? ' ok' : ''));
-      c.innerHTML = '<button class="rgapp-x" type="button" aria-label="x">✕</button><b>' + esc(titre) + '</b><p>' + esc(lib) + (etat === 'telechargement' ? ' · ' + Math.round(pct) + ' %' : '') + (msg ? ' · ' + esc(msg) : '') + '</p>'
+      c.innerHTML = '<button class="rgapp-x" type="button" aria-label="' + T('Fermer', 'Close', 'Cerrar') + '"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button><b>' + esc(titre) + '</b><p>' + esc(lib) + (etat === 'telechargement' ? ' · ' + Math.round(pct) + ' %' : '') + (msg ? ' · ' + esc(msg) : '') + '</p>'
         + (etat === 'telechargement' || etat === 'installation' ? '<div class="rgapp-b"><i style="width:' + Math.max(2, pct) + '%"></i></div>' : '')
         + (etat === 'fini' ? '<p><a href="retrogems://jouer/' + encodeURIComponent(slug) + '" style="color:#0ff;font-weight:700">▶ ' + T('Jouer', 'Play', 'Jugar') + '</a></p>' : '');
       c.querySelector('.rgapp-x').onclick = function () { c.remove(); delete cartes[slug]; };
@@ -71,11 +73,11 @@
   /* boutons du launcher (Installer, Jouer, Désinstaller…) : envoyés directement au programme */
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[href^="retrogems://"]') : null; if (!a) return;
-    var I = window.__TAURI_INTERNALS__; if (!I || !I.invoke) return;
     e.preventDefault(); e.stopImmediatePropagation();
     var h = a.getAttribute('href');
     if (/^retrogems:\/\/installer\//.test(h) && window.rglApp) { window.rglApp.progres(decodeURIComponent(h.split('/').pop()), a.getAttribute('data-rgl-titre') || '', 'preparation', 0, ''); }
-    I.invoke('lien', { url: h }).catch(function () { location.href = h; });
+    /* v0.1.3 : adresse https interceptée par le programme (fiable dans WebView2), sans dépendre de l'IPC */
+    location.href = location.origin + '/rgl-action/?u=' + encodeURIComponent(h);
   }, true);
   /* liens externes (GitHub, sites des projets) : dans le navigateur de l'ordinateur ; liens du site : dans le launcher */
   document.addEventListener('click', function (e) {
@@ -86,6 +88,6 @@
     var connexion = /(^|\.)(google\.com|googleusercontent\.com|twitch\.tv|gstatic\.com)$/.test(u.hostname);
     if (site || connexion) { if (a.target === '_blank') { e.preventDefault(); location.href = u.href; } return; }
     e.preventDefault(); e.stopPropagation();
-    location.href = 'retrogems://ouvrir/?u=' + encodeURIComponent(u.href);
+    location.href = location.origin + '/rgl-action/?u=' + encodeURIComponent('retrogems://ouvrir/?u=' + encodeURIComponent(u.href));
   }, true);
 })();

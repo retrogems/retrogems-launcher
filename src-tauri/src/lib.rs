@@ -139,6 +139,32 @@ fn pousser_etat(app: &AppHandle) {
     page(app, format!("window.rglApp&&window.rglApp.etat({j})"));
 }
 
+/// Agent du navigateur intégré : celui d'Edge, suivi de RetroGemsLauncher (le site reconnaît ainsi le programme).
+fn agent() -> String {
+    let base = if cfg!(target_os = "windows") {
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0"
+    } else if cfg!(target_os = "macos") {
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    } else {
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    };
+    format!("{base} RetroGemsLauncher/{}", env!("CARGO_PKG_VERSION"))
+}
+
+/// https://retrogems.fr/rgl-action/?u=retrogems://installer/slug → retrogems://installer/slug
+fn action_https(u: &Url) -> Option<Url> {
+    let h = u.host_str().unwrap_or("");
+    if (u.scheme() != "https" && u.scheme() != "http") || !(h == "retrogems.fr" || h.ends_with(".retrogems.fr")) {
+        return None;
+    }
+    if !u.path().trim_end_matches('/').ends_with("/rgl-action") {
+        return None;
+    }
+    let v = u.query_pairs().find(|(k, _)| k == "u").map(|(_, v)| v.into_owned())?;
+    let l: Url = v.parse().ok()?;
+    if l.scheme() == "retrogems" { Some(l) } else { None }
+}
+
 /* ---------------------------------------------------------------- liens retrogems:// */
 
 fn gerer_lien(app: &AppHandle, u: &Url) {
@@ -569,15 +595,23 @@ pub fn run() {
                 .inner_size(1360.0, 860.0)
                 .min_inner_size(960.0, 620.0)
                 .initialization_script(SCRIPT_PAGE)
+                .user_agent(&agent())
                 .on_navigation(move |u| {
                     if u.scheme() == "retrogems" {
                         gerer_lien(&h_nav, u);
                         return false;
                     }
+                    /* v0.1.3 : action du launcher envoyée par la page sous forme d'adresse https (WebView2 signale toujours ces navigations) */
+                    if let Some(l) = action_https(u) {
+                        gerer_lien(&h_nav, &l);
+                        return false;
+                    }
                     true
                 })
-                .on_page_load(move |_w, charge| {
+                .on_page_load(move |w, charge| {
                     if matches!(charge.event(), PageLoadEvent::Finished) {
+                        /* le script du launcher est remis à la fin du chargement, au cas où le script d'ouverture n'aurait pas été lancé */
+                        let _ = w.eval(SCRIPT_PAGE);
                         pousser_etat(&h_charge);
                     }
                 })
