@@ -47,8 +47,11 @@ jobs:
       - name: Outils
         run: npm install
 
-      - name: Icônes
-        run: npx tauri icon app-icon.png
+      - name: Icônes (icône de l'application RetroGems, la même que la PWA de retrogems.fr)
+        shell: bash
+        run: |
+          curl -fsSL https://retrogems.fr/pwa-icone-512.png -o app-icon.png || echo "icône du site injoignable : icône du dépôt gardée"
+          npx tauri icon app-icon.png
 
       - uses: tauri-apps/tauri-action@v0
         env:
