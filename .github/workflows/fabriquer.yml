@@ -1,0 +1,62 @@
+# Fabrique gratuitement les installateurs du launcher RetroGems (Windows, Linux / Steam Deck, macOS)
+# à chaque envoi sur la branche main, et les publie dans « Releases ». Le site retrogems.fr les copie ensuite tout seul.
+name: Fabriquer le launcher
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fabriquer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plateforme: windows-latest
+            args: ''
+          - plateforme: ubuntu-22.04
+            args: ''
+          - plateforme: macos-latest
+            args: '--target universal-apple-darwin'
+    runs-on: ${{ matrix.plateforme }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bibliothèques Linux
+        if: matrix.plateforme == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.plateforme == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Outils
+        run: npm install
+
+      - name: Icônes
+        run: npx tauri icon app-icon.png
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'RetroGems Launcher v__VERSION__'
+          releaseBody: 'Installateurs du launcher RetroGems. Téléchargement conseillé : https://retrogems.fr/launcher/'
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
