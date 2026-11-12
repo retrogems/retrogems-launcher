@@ -1,0 +1,82 @@
+/* RetroGems Launcher : script ajouté à chaque page de retrogems.fr dans le programme.
+   Masque l'en-tête et le pied du site (l'interface du launcher suffit), affiche les téléchargements,
+   transforme « Installer » en « Jouer » pour les jeux installés et ouvre les liens externes dans le navigateur. */
+(function () {
+  if (!/(^|\.)retrogems\.fr$/.test(location.hostname)) return;
+  window.RGL_APP = true;
+  var L = (document.documentElement.getAttribute('lang') || navigator.language || 'fr').slice(0, 2);
+  var T = function (fr, en, es) { return L === 'fr' ? fr : (L === 'es' ? es : en); };
+  var css = '#retrogems-header,.rghd-wrap,#retrogems-footer,#rg-mobile-nav,.rg-pwa-feuille,#rg-mobile-panel{display:none!important}'
+    + '.rgls-menu{height:100vh}.rgls-dlbox{display:none!important}'
+    + '#rgapp{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 36px));font-family:Quicksand,system-ui,sans-serif}'
+    + '.rgapp-c{background:linear-gradient(160deg,#151b24,#0d1117);border:1px solid rgba(0,255,255,.4);border-radius:14px;padding:14px 16px;color:#e0e0e0;box-shadow:0 0 24px rgba(0,255,255,.18),0 18px 40px rgba(0,0,0,.6)}'
+    + '.rgapp-c b{display:block;color:#fff;margin-bottom:4px}.rgapp-c p{margin:4px 0 0;font-size:.85rem;color:#c9d1d9;line-height:1.45}'
+    + '.rgapp-b{height:6px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}.rgapp-b i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00ffff,#ff00ff);transition:width .3s}'
+    + '.rgapp-c.ko{border-color:#ff5c7a}.rgapp-c.ok{border-color:#ff00ff}.rgapp-x{float:right;background:none;border:none;color:#8b949e;cursor:pointer;font-size:14px}'
+    + '.rgapp-mes{position:fixed;left:18px;bottom:18px;z-index:2147482999;display:none;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid #ff00ff;background:rgba(13,17,23,.92);color:#ffb3ff;font:700 .9rem Quicksand,sans-serif;cursor:pointer;box-shadow:0 0 16px rgba(255,0,255,.35)}'
+    + '.rgapp-panneau{position:fixed;left:18px;bottom:70px;z-index:2147482999;width:min(380px,calc(100vw - 36px));max-height:60vh;overflow:auto;display:none;background:#0d1117;border:1px solid rgba(255,0,255,.5);border-radius:14px;padding:12px;box-shadow:0 18px 40px rgba(0,0,0,.6)}'
+    + '.rgapp-panneau.on{display:block}.rgapp-l{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,.06);color:#e0e0e0}.rgapp-l span{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+    + '.rgapp-l a{padding:5px 10px;border-radius:8px;border:1px solid rgba(0,255,255,.5);color:#0ff!important;text-decoration:none!important;font-size:.8rem;font-weight:700}.rgapp-l a.j{background:linear-gradient(90deg,#ff00ff,#7000ff);border-color:transparent;color:#fff!important}';
+  function pret(f) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', f); else f(); }
+  var boite = null, cartes = {}, mes = null, panneau = null;
+  pret(function () {
+    var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+    boite = document.createElement('div'); boite.id = 'rgapp'; document.body.appendChild(boite);
+    mes = document.createElement('button'); mes.className = 'rgapp-mes'; mes.type = 'button'; document.body.appendChild(mes);
+    panneau = document.createElement('div'); panneau.className = 'rgapp-panneau'; document.body.appendChild(panneau);
+    mes.addEventListener('click', function () { panneau.classList.toggle('on'); });
+    window.rglApp.marquer(); window.rglApp.liste();
+    new MutationObserver(function () { window.rglApp.marquer(); }).observe(document.body, { childList: true, subtree: true });
+  });
+  function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  window.rglApp = {
+    installes: {},
+    etat: function (liste) { var o = {}; (liste || []).forEach(function (x) { o[x.slug] = x; }); this.installes = o; this.marquer(); this.liste(); },
+    marquer: function () {
+      var I = this.installes;
+      document.querySelectorAll('a[href^="retrogems://installer/"]:not([data-rgl-maj])').forEach(function (a) {
+        var slug = decodeURIComponent(a.getAttribute('href').split('/').pop());
+        if (!I[slug]) return;
+        a.setAttribute('href', 'retrogems://jouer/' + encodeURIComponent(slug));
+        a.removeAttribute('data-rgl-installer'); a.title = T('Jouer', 'Play', 'Jugar');
+        if (a.textContent.trim() !== '') { a.textContent = T('Jouer', 'Play', 'Jugar'); }
+      });
+    },
+    liste: function () {
+      if (!mes) return;
+      var l = Object.keys(this.installes).map(function (k) { return this.installes[k]; }, this);
+      mes.style.display = l.length ? 'inline-flex' : 'none';
+      mes.textContent = '🎮 ' + T('Mes jeux installés', 'My installed games', 'Mis juegos instalados') + ' (' + l.length + ')';
+      panneau.innerHTML = l.map(function (x) {
+        var s = encodeURIComponent(x.slug);
+        return '<div class="rgapp-l"><span title="' + esc(x.titre) + '">' + esc(x.titre) + '</span><a class="j" href="retrogems://jouer/' + s + '">' + T('Jouer', 'Play', 'Jugar') + '</a>'
+          + '<a href="retrogems://dossier/' + s + '" title="' + T('Ouvrir le dossier', 'Open folder', 'Abrir carpeta') + '">📁</a>'
+          + '<a href="retrogems://installer/' + s + '" data-rgl-maj title="' + T('Réinstaller ou mettre à jour', 'Reinstall or update', 'Reinstalar o actualizar') + '">↻</a>'
+          + '<a href="retrogems://desinstaller/' + s + '" title="' + T('Désinstaller', 'Uninstall', 'Desinstalar') + '" onclick="return confirm(' + esc(JSON.stringify(T('Désinstaller ce jeu ?', 'Uninstall this game?', '¿Desinstalar este juego?'))) + ')">✕</a></div>';
+      }).join('');
+    },
+    progres: function (slug, titre, etat, pct, msg) {
+      if (!boite) return;
+      var c = cartes[slug];
+      if (!c) { c = document.createElement('div'); c.className = 'rgapp-c'; boite.appendChild(c); cartes[slug] = c; }
+      var lib = { preparation: T('Préparation', 'Preparing', 'Preparando'), telechargement: T('Téléchargement', 'Downloading', 'Descargando'), installation: T('Installation', 'Installing', 'Instalando'), fini: T('Prêt à jouer', 'Ready to play', 'Listo para jugar'), erreur: T('Problème', 'Problem', 'Problema') }[etat] || etat;
+      c.className = 'rgapp-c' + (etat === 'erreur' ? ' ko' : (etat === 'fini' ? ' ok' : ''));
+      c.innerHTML = '<button class="rgapp-x" type="button" aria-label="x">✕</button><b>' + esc(titre) + '</b><p>' + esc(lib) + (etat === 'telechargement' ? ' · ' + Math.round(pct) + ' %' : '') + (msg ? ' · ' + esc(msg) : '') + '</p>'
+        + (etat === 'telechargement' || etat === 'installation' ? '<div class="rgapp-b"><i style="width:' + Math.max(2, pct) + '%"></i></div>' : '')
+        + (etat === 'fini' ? '<p><a href="retrogems://jouer/' + encodeURIComponent(slug) + '" style="color:#0ff;font-weight:700">▶ ' + T('Jouer', 'Play', 'Jugar') + '</a></p>' : '');
+      c.querySelector('.rgapp-x').onclick = function () { c.remove(); delete cartes[slug]; };
+      if (etat === 'fini' || etat === 'erreur') { setTimeout(function () { if (cartes[slug] === c) { c.remove(); delete cartes[slug]; } }, 20000); }
+    }
+  };
+  /* liens externes (GitHub, sites des projets) : dans le navigateur de l'ordinateur ; liens du site : dans le launcher */
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null; if (!a) return;
+    var u; try { u = new URL(a.href, location.href); } catch (x) { return; }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return;
+    var site = /(^|\.)retrogems\.fr$/.test(u.hostname);
+    var connexion = /(^|\.)(google\.com|googleusercontent\.com|twitch\.tv|gstatic\.com)$/.test(u.hostname);
+    if (site || connexion) { if (a.target === '_blank') { e.preventDefault(); location.href = u.href; } return; }
+    e.preventDefault(); e.stopPropagation();
+    location.href = 'retrogems://ouvrir/?u=' + encodeURIComponent(u.href);
+  }, true);
+})();
