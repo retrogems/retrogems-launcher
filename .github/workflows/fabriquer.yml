@@ -50,7 +50,13 @@ jobs:
       - name: Icônes (icône de l'application RetroGems, la même que la PWA de retrogems.fr)
         shell: bash
         run: |
-          curl -fsSL https://retrogems.fr/pwa-icone-512.png -o app-icon.png || echo "icône du site injoignable : icône du dépôt gardée"
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+          ok=0
+          for u in https://retrogems.fr/pwa-icone-512.png https://www.retrogems.fr/pwa-icone-512.png; do
+            if curl -fsSL --retry 3 -A "$UA" -H "Accept: image/png,image/*" "$u" -o icone-site.png && head -c 8 icone-site.png | od -An -tx1 | grep -q "89 50 4e 47"; then ok=1; break; fi
+          done
+          if [ "$ok" = 1 ]; then cp icone-site.png app-icon.png; echo "Icône de la PWA retrogems.fr utilisée";
+          else echo "::warning::Icône de retrogems.fr injoignable depuis GitHub : icône du dépôt (app-icon.png) utilisée"; fi
           npx tauri icon app-icon.png
 
       - uses: tauri-apps/tauri-action@v0
