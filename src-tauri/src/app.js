@@ -30,9 +30,7 @@
     try { document.documentElement.classList.add('rg-app'); } catch (x) {}
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     boite = document.createElement('div'); boite.id = 'rgapp'; document.body.appendChild(boite);
-    mes = document.createElement('button'); mes.className = 'rgapp-mes'; mes.type = 'button'; document.body.appendChild(mes);
-    panneau = document.createElement('div'); panneau.className = 'rgapp-panneau'; document.body.appendChild(panneau);
-    mes.addEventListener('click', function () { panneau.classList.toggle('on'); });
+    /* v0.2.1 : plus de bouton fixe « Mes jeux installés » : les jeux sont dans « Mes jeux » du site */
     window.rglApp.marquer(); window.rglApp.liste();
     new MutationObserver(function () { window.rglApp.marquer(); }).observe(document.body, { childList: true, subtree: true });
   });
