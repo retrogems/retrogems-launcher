@@ -1,4 +1,4 @@
-# Fabrique gratuitement les installateurs du launcher RetroGems (Windows, Linux / Steam Deck, macOS)
+# Fabrique gratuitement les installateurs de l'application RetroGems (Windows, Linux / Steam Deck, macOS, Android)
 # à chaque envoi sur la branche main, et les publie dans « Releases ». Le site retrogems.fr les copie ensuite tout seul.
 name: Fabriquer le launcher
 
@@ -74,8 +74,84 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
-          releaseName: 'RetroGems Launcher v__VERSION__'
+          releaseName: 'RetroGems v__VERSION__'
           releaseBody: 'Installateurs du launcher RetroGems. Téléchargement conseillé : https://retrogems.fr/launcher/'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # v0.2.2 : application RetroGems pour Android (APK), publiée dans la même version que l'application pour ordinateur.
+  # Il faut deux secrets dans le dépôt (Settings › Secrets and variables › Actions) : ANDROID_KEYSTORE_B64 et ANDROID_KEYSTORE_PASSWORD.
+  android:
+    needs: fabriquer
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Projet Android
+        shell: bash
+        run: if [ ! -d android ] && [ -f android.zip ]; then unzip -q android.zip; fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Version
+        shell: bash
+        run: echo "VER=$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")" >> "$GITHUB_ENV"
+
+      - name: Icônes (celles de la PWA de retrogems.fr)
+        shell: bash
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+          if curl -fsSL --retry 3 -A "$UA" https://retrogems.fr/pwa-icone-512.png -o icone.png && head -c 8 icone.png | od -An -tx1 | grep -q "89 50 4e 47"; then
+            python3 -m pip install --quiet pillow
+            python3 - <<'PY'
+          from PIL import Image
+          im = Image.open('icone.png').convert('RGBA')
+          for n, t in [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdpi', 192)]:
+              im.resize((t, t), Image.LANCZOS).save(f'android/app/src/main/res/mipmap-{n}/ic_launcher.png')
+          im.resize((288, 288), Image.LANCZOS).save('android/app/src/main/res/drawable/splash.png')
+          PY
+          else
+            echo "::warning::Icône de retrogems.fr injoignable : icônes du dépôt utilisées"
+          fi
+
+      - name: Clé de signature
+        id: cle
+        shell: bash
+        env:
+          KEY_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEY_B64" ]; then
+            echo "::warning::Secret ANDROID_KEYSTORE_B64 absent : l'APK Android n'est pas fabriqué"
+            echo "ok=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEY_B64" | base64 -d > "$RUNNER_TEMP/retrogems.jks"
+          echo "ok=1" >> "$GITHUB_OUTPUT"
+
+      - name: APK
+        if: steps.cle.outputs.ok == '1'
+        shell: bash
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          export KEYSTORE_FILE="$RUNNER_TEMP/retrogems.jks" VERSION_NAME="$VER"
+          gradle -p android assembleRelease --no-daemon --stacktrace
+          cp android/app/build/outputs/apk/release/app-release.apk "RetroGems_${VER}_android.apk"
+
+      - name: Publier l'APK
+        if: steps.cle.outputs.ok == '1'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VER }}
+          name: RetroGems v${{ env.VER }}
+          files: RetroGems_${{ env.VER }}_android.apk
