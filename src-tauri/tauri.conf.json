@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "RetroGems Launcher",
-  "version": "0.1.6",
+  "productName": "RetroGems",
+  "version": "0.2.0",
   "identifier": "fr.retrogems.launcher",
   "build": {
     "frontendDist": "../src"
@@ -18,8 +18,8 @@
     "category": "Game",
     "publisher": "RetroGems",
     "copyright": "RetroGems",
-    "shortDescription": "Tous les portages et recompilations PC en 1 clic",
-    "longDescription": "Le launcher gratuit de RetroGems installe, met à jour et lance les portages PC natifs (recompilations et décompilations).",
+    "shortDescription": "RetroGems : actu jeux vidéo, jeux du Studio et portages PC en 1 clic",
+    "longDescription": "L'application gratuite de RetroGems : toute l'actu du jeu vidéo, les jeux RetroGems Studio, la communauté, et l'installation des portages PC natifs (recompilations et décompilations) en 1 clic.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -29,7 +29,11 @@
     ],
     "windows": {
       "nsis": {
-        "languages": ["French", "English", "Spanish"],
+        "languages": [
+          "French",
+          "English",
+          "Spanish"
+        ],
         "displayLanguageSelector": false
       }
     },
@@ -41,7 +45,9 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["retrogems"]
+        "schemes": [
+          "retrogems"
+        ]
       }
     }
   }

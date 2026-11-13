@@ -1,6 +1,6 @@
 [package]
 name = "retrogems-launcher"
-version = "0.1.6"
+version = "0.2.0"
 description = "RetroGems Launcher"
 authors = ["RetroGems"]
 edition = "2021"
