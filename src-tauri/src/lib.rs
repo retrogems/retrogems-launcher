@@ -133,10 +133,32 @@ fn progres(app: &AppHandle, slug: &str, titre: &str, etat: &str, pct: f64, msg: 
     );
 }
 
+/// Identité de cet ordinateur pour « Mes jeux » sur retrogems.fr : clé tirée au hasard une fois, nom de l'ordinateur, système.
+fn appareil() -> Value {
+    let f = racine().join("appareil.txt");
+    let mut cle = fs::read_to_string(&f).unwrap_or_default().trim().to_string();
+    if cle.len() < 32 || !cle.chars().all(|c| c.is_ascii_hexdigit()) {
+        use std::hash::{BuildHasher, Hasher};
+        let mut c = String::new();
+        for i in 0..4u64 {
+            let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+            h.write_u64(i);
+            h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+            h.write_u32(std::process::id());
+            c.push_str(&format!("{:016x}", h.finish()));
+        }
+        cle = c;
+        let _ = fs::create_dir_all(racine());
+        let _ = fs::write(&f, &cle);
+    }
+    let nom = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_else(|_| "PC".to_string());
+    serde_json::json!({ "cle": cle, "nom": nom, "os": systeme() })
+}
+
 fn pousser_etat(app: &AppHandle) {
     let r = lire_registre();
     let j = serde_json::to_string(&r).unwrap_or_else(|_| "[]".to_string());
-    page(app, format!("window.rglApp&&window.rglApp.etat({j})"));
+    page(app, format!("window.rglApp&&window.rglApp.etat({j},{})", appareil()));
 }
 
 /// Agent du navigateur intégré : celui d'Edge, suivi de RetroGemsLauncher (le site reconnaît ainsi le programme).
@@ -504,30 +526,30 @@ async fn installer(app: &AppHandle, slug: &str) -> Result<(), String> {
         }
     }
 
-    // Fichier du jeu à fournir par le joueur (sa propre copie)
-    let mut note = t("Installé ! Clique sur Jouer.", "Installed! Click Play.", "¡Instalado! Pulsa Jugar.");
+    // v0.1.5 : explication claire de la suite (fichier du jeu à fournir, premier lancement)
+    let mut etapes: Vec<String> = Vec::new();
     let jr = &p["jeu_requis"];
     if jr["requis"].as_bool().unwrap_or(false) {
         let nom = jr["nom"].as_str().unwrap_or("").to_string();
+        let formats: Vec<String> = jr["formats"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect()).unwrap_or_default();
+        let fmt = if formats.is_empty() { String::new() } else { format!(" ({})", formats.join(", ")) };
         let mode = jr["mode"].as_str().unwrap_or("");
         let dest = jr["destination"].as_str().unwrap_or("");
         if mode != "dans_le_jeu" && !dest.is_empty() {
             let d = dossier.join(dest);
             let _ = fs::create_dir_all(&d);
-            let _ = open::that(&d);
-            note = format!(
-                "{} {}",
-                t("Installé ! Dépose le fichier de ta copie du jeu dans le dossier qui vient de s'ouvrir :", "Installed! Put the file from your copy of the game in the folder that just opened:", "¡Instalado! Coloca el archivo de tu copia del juego en la carpeta que se acaba de abrir:"),
-                nom
-            );
+            etapes.push(format!("{} {nom}{fmt} {}", t("Ce portage a besoin de ta propre copie du jeu :", "This port needs your own copy of the game:", "Este port necesita tu propia copia del juego:"), t("— clique sur « Ouvrir le dossier du jeu » et dépose le fichier dans le dossier qui s'ouvre.", "— click \"Open the game folder\" and put the file in the folder that opens.", "— pulsa «Abrir la carpeta del juego» y coloca el archivo en la carpeta que se abre.")));
         } else if !nom.is_empty() {
-            note = format!(
-                "{} {}",
-                t("Installé ! Au premier lancement, le jeu te demandera le fichier de ta copie :", "Installed! On first launch, the game will ask for the file from your copy:", "¡Instalado! En el primer inicio, el juego te pedirá el archivo de tu copia:"),
-                nom
-            );
+            etapes.push(format!("{} {nom}{fmt}.", t("Ce portage a besoin de ta propre copie du jeu : au premier lancement, il te demandera le fichier", "This port needs your own copy of the game: on first launch it will ask for the file", "Este port necesita tu propia copia del juego: en el primer inicio te pedirá el archivo")));
+        }
+        if let Some(aide) = jr["aide"][langue()].as_str().or_else(|| jr["aide"]["fr"].as_str()) {
+            if !aide.trim().is_empty() { etapes.push(aide.trim().to_string()); }
         }
     }
+    if let Some(n) = p["notes"].as_str() {
+        if !n.trim().is_empty() { etapes.push(n.trim().to_string()); }
+    }
+    let guide = p["guide"].as_str().unwrap_or("").to_string();
 
     let mut r = lire_registre();
     r.retain(|i| i.slug != slug);
@@ -541,7 +563,8 @@ async fn installer(app: &AppHandle, slug: &str) -> Result<(), String> {
     });
     ecrire_registre(&r);
     pousser_etat(app);
-    progres(app, slug, &titre, "fini", 100.0, &note);
+    progres(app, slug, &titre, "fini", 100.0, "");
+    page(app, format!("window.rglApp&&window.rglApp.fini({},{},{},{})", js_texte(slug), js_texte(&titre), serde_json::to_string(&etapes).unwrap_or_else(|_| "[]".to_string()), js_texte(&guide)));
     rapport(slug, &version, true).await;
     Ok(())
 }

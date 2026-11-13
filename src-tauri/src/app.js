@@ -17,6 +17,8 @@
     + '.rgapp-c b{display:block;color:#fff;margin-bottom:4px}.rgapp-c p{margin:4px 0 0;font-size:.85rem;color:#c9d1d9;line-height:1.45}'
     + '.rgapp-b{height:6px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}.rgapp-b i{display:block;height:100%;width:0;background:linear-gradient(90deg,#00ffff,#ff00ff);transition:width .3s}'
     + '.rgapp-c.ko{border-color:#ff5c7a}.rgapp-c.ok{border-color:#ff00ff}.rgapp-c{position:relative;padding-right:52px!important}.rgapp-x{position:absolute!important;top:10px;right:10px;width:30px!important;height:30px!important;min-width:0!important;padding:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:50%!important;border:1px solid rgba(0,255,255,.6)!important;background:#0d1117!important;color:#fff!important;font-size:0!important;line-height:0!important;cursor:pointer}.rgapp-x svg{width:12px;height:12px;display:block;stroke:#fff}.rgapp-x:hover{background:rgba(0,255,255,.15)!important}'
+    + '.rgapp-ok{color:#7dffb0!important;font-weight:700}.rgapp-st{margin-top:10px!important;color:#fff!important;font-weight:700}.rgapp-ol{margin:6px 0 0;padding-left:18px;font-size:.84rem;line-height:1.5;color:#c9d1d9}.rgapp-ol li{margin:0 0 6px}'
+    + '.rgapp-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.rgapp-btns a{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 14px;border-radius:999px;font:700 .85rem Quicksand,sans-serif;text-decoration:none!important}.rgapp-jouer{background:linear-gradient(90deg,#ff00ff,#7000ff);color:#fff!important;box-shadow:0 0 12px rgba(255,0,255,.4)}.rgapp-sec{border:1px solid rgba(0,255,255,.6);color:#0ff!important;background:#0d1117}'
     + '.rgapp-mes{position:fixed;left:18px;bottom:18px;z-index:2147482999;display:none;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid #ff00ff;background:rgba(13,17,23,.92);color:#ffb3ff;font:700 .9rem Quicksand,sans-serif;cursor:pointer;box-shadow:0 0 16px rgba(255,0,255,.35)}'
     + '.rgapp-panneau{position:fixed;left:18px;bottom:70px;z-index:2147482999;width:min(380px,calc(100vw - 36px));max-height:60vh;overflow:auto;display:none;background:#0d1117;border:1px solid rgba(255,0,255,.5);border-radius:14px;padding:12px;box-shadow:0 18px 40px rgba(0,0,0,.6)}'
     + '.rgapp-panneau.on{display:block}.rgapp-l{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,.06);color:#e0e0e0}.rgapp-l span{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
@@ -37,7 +39,35 @@
   function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   window.rglApp = {
     installes: {},
-    etat: function (liste) { var o = {}; (liste || []).forEach(function (x) { o[x.slug] = x; }); this.installes = o; this.marquer(); this.liste(); },
+    etat: function (liste, ap) { var o = {}; (liste || []).forEach(function (x) { o[x.slug] = x; }); this.installes = o; if (ap) this.appareil = ap; this.marquer(); this.liste(); this.sync(); },
+    /* v0.1.5 : les jeux installés sont envoyés à « Mes jeux » du compte retrogems.fr (si le joueur est connecté) */
+    sync: function () {
+      var self = this; if (!this.appareil) return;
+      var I = this.installes, jeux = Object.keys(I).map(function (k) { return { slug: k, version: I[k].version || '', installe: 1 }; });
+      var corps = JSON.stringify({ appareil: this.appareil, jeux: jeux, complet: true });
+      try { if (sessionStorage.getItem('rglSync') === corps) return; } catch (x) {}
+      fetch('/wp-admin/admin-ajax.php?action=rest-nonce', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (n) {
+        n = (n || '').trim(); if (!/^[a-f0-9]{6,16}$/.test(n)) return;
+        return fetch('/wp-json/retrogems/v1/launcher/jeux-site', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': n }, body: corps }).then(function (r) {
+          if (!r.ok) return; try { sessionStorage.setItem('rglSync', corps); } catch (x) {}
+          if (document.querySelector('.rgd-vide') && /onglet=jeux|mes-jeux|my-games|mis-juegos/.test(location.href)) location.reload();
+        });
+      }).catch(function () {});
+    },
+    /* v0.1.5 : fin d'installation : carte qui reste affichée, avec la suite expliquée */
+    fini: function (slug, titre, etapes, guide) {
+      if (!boite) return;
+      var c = cartes[slug]; if (!c) { c = document.createElement('div'); boite.appendChild(c); cartes[slug] = c; }
+      c.className = 'rgapp-c ok';
+      var li = (etapes || []).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('');
+      c.innerHTML = '<button class="rgapp-x" type="button" aria-label="' + T('Fermer', 'Close', 'Cerrar') + '"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>'
+        + '<b>' + esc(titre) + '</b><p class="rgapp-ok">✓ ' + T('Installé sur cet ordinateur', 'Installed on this computer', 'Instalado en este ordenador') + '</p>'
+        + (li ? '<p class="rgapp-st">' + T('Avant de jouer :', 'Before you play:', 'Antes de jugar:') + '</p><ol class="rgapp-ol">' + li + '</ol>' : '')
+        + '<div class="rgapp-btns"><a class="rgapp-jouer" href="retrogems://jouer/' + encodeURIComponent(slug) + '">▶ ' + T('Jouer', 'Play', 'Jugar') + '</a>'
+        + '<a class="rgapp-sec" href="retrogems://dossier/' + encodeURIComponent(slug) + '">' + T('Ouvrir le dossier du jeu', 'Open the game folder', 'Abrir la carpeta del juego') + '</a>'
+        + (guide ? '<a class="rgapp-sec" href="' + esc(guide) + '">' + T('Lire le guide', 'Read the guide', 'Leer la guía') + '</a>' : '') + '</div>';
+      c.querySelector('.rgapp-x').onclick = function () { c.remove(); delete cartes[slug]; };
+    },
     marquer: function () {
       var I = this.installes;
       document.querySelectorAll('a[href^="retrogems://installer/"]:not([data-rgl-maj])').forEach(function (a) {
@@ -71,7 +101,7 @@
         + (etat === 'telechargement' || etat === 'installation' ? '<div class="rgapp-b"><i style="width:' + Math.max(2, pct) + '%"></i></div>' : '')
         + (etat === 'fini' ? '<p><a href="retrogems://jouer/' + encodeURIComponent(slug) + '" style="color:#0ff;font-weight:700">▶ ' + T('Jouer', 'Play', 'Jugar') + '</a></p>' : '');
       c.querySelector('.rgapp-x').onclick = function () { c.remove(); delete cartes[slug]; };
-      if (etat === 'fini' || etat === 'erreur') { setTimeout(function () { if (cartes[slug] === c) { c.remove(); delete cartes[slug]; } }, 20000); }
+
     }
   };
   /* boutons du launcher (Installer, Jouer, Désinstaller…) : envoyés directement au programme */
