@@ -5,8 +5,10 @@
   if (!/(^|\.)retrogems\.fr$/.test(location.hostname)) return;
   if (window.__rglAppScript) return; window.__rglAppScript = 1;   /* v0.1.3 : le programme peut relancer ce script en fin de chargement */
   window.RGL_APP = true;
-  try { document.documentElement.classList.add('rg-app'); document.cookie = 'rgapp=1; path=/; max-age=31536000; SameSite=Lax; Secure'; } catch (x) {}
-  var L = (document.documentElement.getAttribute('lang') || navigator.language || 'fr').slice(0, 2);
+  /* v0.1.4 : au tout début du chargement, document.documentElement n'existe pas encore : avant, le script plantait ici et rien ne marchait dans le programme */
+  try { document.cookie = 'rgapp=1; path=/; max-age=31536000; SameSite=Lax; Secure'; } catch (x) {}
+  function langue() { var h = document.documentElement; var l = (h && h.getAttribute('lang')) || (/\/(en|es)\//.exec(location.pathname) || [])[1] || navigator.language || 'fr'; return String(l).slice(0, 2); }
+  var L = langue();
   var T = function (fr, en, es) { return L === 'fr' ? fr : (L === 'es' ? es : en); };
   var css = '#retrogems-header,.rghd-wrap,#retrogems-footer,#rg-mobile-nav,.rg-pwa-feuille,#rg-mobile-panel{display:none!important}'
     + '.rgls-menu{height:100vh}.rgls-dlbox{display:none!important}'
@@ -22,6 +24,8 @@
   function pret(f) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', f); else f(); }
   var boite = null, cartes = {}, mes = null, panneau = null;
   pret(function () {
+    L = langue();
+    try { document.documentElement.classList.add('rg-app'); } catch (x) {}
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     boite = document.createElement('div'); boite.id = 'rgapp'; document.body.appendChild(boite);
     mes = document.createElement('button'); mes.className = 'rgapp-mes'; mes.type = 'button'; document.body.appendChild(mes);

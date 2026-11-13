@@ -229,7 +229,7 @@ fn gerer_lien(app: &AppHandle, u: &Url) {
 
 async fn rapport(slug: &str, version: &str, ok: bool) {
     let corps = serde_json::json!({ "slug": slug, "version": version, "ok": ok, "os": systeme() });
-    if let Ok(c) = reqwest::Client::builder().user_agent("RetroGemsLauncher/0.1").build() {
+    if let Ok(c) = reqwest::Client::builder().user_agent(agent()).build() {
         let _ = c
             .post(format!("{SITE}/wp-json/retrogems/v1/launcher/rapport"))
             .json(&corps)
@@ -387,23 +387,28 @@ fn installer_dmg(_dmg: &Path, _dossier: &Path, _app_nom: &str) -> Result<PathBuf
 }
 
 async fn installer(app: &AppHandle, slug: &str) -> Result<(), String> {
+    /* v0.1.4 : même identité que le navigateur intégré (Cloudflare refuse les programmes inconnus) */
     let client = reqwest::Client::builder()
-        .user_agent("RetroGemsLauncher/0.1")
+        .user_agent(agent())
         .build()
         .map_err(es)?;
     progres(app, slug, slug, "preparation", 0.0, &t("Lecture de la recette…", "Reading the recipe…", "Leyendo la receta…"));
-    let p: Value = client
+    let rep_p = client
         .get(format!(
             "{SITE}/wp-json/retrogems/v1/launcher/projet/{}?lg={}",
             urlencoding::encode(slug),
             langue()
         ))
+        .header("Accept", "application/json")
         .send()
         .await
-        .map_err(es)?
-        .json()
-        .await
-        .map_err(es)?;
+        .map_err(|e| format!("{} : {e}", t("Site injoignable", "Site unreachable", "Sitio inaccesible")))?;
+    let statut = rep_p.status();
+    let texte = rep_p.text().await.map_err(es)?;
+    if !statut.is_success() {
+        return Err(format!("{} ({statut})", t("Le site a refusé la demande", "The site refused the request", "El sitio rechazó la solicitud")));
+    }
+    let p: Value = serde_json::from_str(&texte).map_err(|_| t("Réponse du site illisible.", "Unreadable site response.", "Respuesta del sitio ilegible."))?;
     let titre = p["titre"].as_str().unwrap_or(slug).to_string();
     let version = p["version"].as_str().unwrap_or("").to_string();
     let c = &p["cibles"][systeme()];
