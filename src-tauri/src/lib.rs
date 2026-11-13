@@ -1,4 +1,4 @@
-//! RetroGems Launcher
+//! RetroGems (application pour ordinateur : le site retrogems.fr + installation des portages)
 //!
 //! La fenêtre affiche l'interface du launcher de retrogems.fr (la même que sur le site : bibliothèque, Studio,
 //! connexion, votes). Le programme ajoute ce qu'un site ne peut pas faire : installer, mettre à jour, lancer et
@@ -44,8 +44,8 @@ fn t(fr: &str, en: &str, es: &str) -> String {
 
 fn accueil() -> String {
     match langue() {
-        "fr" => format!("{SITE}/portages-recomp-decomp/?rgapp=1"),
-        l => format!("{SITE}/{l}/ports-recomp-decomp/?rgapp=1"),
+        "fr" => format!("{SITE}/"),   /* v0.2.0 : l'application RetroGems s'ouvre sur l'accueil du site */
+        l => format!("{SITE}/{l}/"),
     }
 }
 
@@ -599,6 +599,96 @@ fn lien(app: AppHandle, url: String) {
     }
 }
 
+/* ---------------------------------------------------------------- mise à jour automatique (v0.2.0) */
+
+/// a > b (versions 1.2.3)
+fn plus_recente(a: &str, b: &str) -> bool {
+    let p = |s: &str| s.trim_start_matches(['v', 'V']).split('.').map(|x| x.trim().parse::<u64>().unwrap_or(0)).collect::<Vec<u64>>();
+    let (x, y) = (p(a), p(b));
+    for i in 0..3 {
+        let (m, n) = (x.get(i).copied().unwrap_or(0), y.get(i).copied().unwrap_or(0));
+        if m != n {
+            return m > n;
+        }
+    }
+    false
+}
+
+/// Cherche une nouvelle version sur retrogems.fr ; si elle existe, la télécharge, l'installe et relance l'application.
+async fn verifier_maj(app: AppHandle) -> Result<(), String> {
+    let client = reqwest::Client::builder().user_agent(agent()).build().map_err(es)?;
+    /* pas de réseau ou site indisponible : on réessaiera plus tard, sans rien afficher */
+    let rep = match client.get(format!("{SITE}/wp-json/retrogems/v1/launcher/appli")).header("Accept", "application/json").send().await {
+        Ok(r) => r,
+        Err(_) => return Ok(()),
+    };
+    let j: Value = match rep.json().await {
+        Ok(j) => j,
+        Err(_) => return Ok(()),
+    };
+    let v = j["version"].as_str().unwrap_or("").to_string();
+    if v.is_empty() || !plus_recente(&v, env!("CARGO_PKG_VERSION")) {
+        return Ok(());
+    }
+    let url = j["fichiers"][systeme()].as_str().unwrap_or("").to_string();
+    if !url.starts_with("https://retrogems.fr/") {
+        return Ok(());
+    }
+    let titre = format!("RetroGems {v}");
+    let nom = nom_sur(url.rsplit('/').next().unwrap_or("maj"));
+    let dossier = racine().join("maj");
+    let _ = fs::remove_dir_all(&dossier);
+    fs::create_dir_all(&dossier).map_err(es)?;
+    let fichier = dossier.join(&nom);
+    progres(&app, "__maj", &titre, "telechargement", 0.0, &t("Nouvelle version de l'application", "New version of the app", "Nueva versión de la aplicación"));
+    telecharger(&app, &client, &url, &fichier, "__maj", &titre).await?;
+    progres(&app, "__maj", &titre, "installation", 100.0, &t("Installation puis redémarrage…", "Installing, then restarting…", "Instalando y reiniciando…"));
+    appliquer_maj(&app, &fichier)
+}
+
+#[cfg(target_os = "windows")]
+fn appliquer_maj(app: &AppHandle, f: &Path) -> Result<(), String> {
+    /* installateur NSIS : /P sans fenêtres, /UPDATE garde réglages et raccourcis, /R relance l'application */
+    Command::new(f).args(["/P", "/UPDATE", "/R"]).spawn().map_err(es)?;
+    app.exit(0);
+    Ok(())
+}
+#[cfg(target_os = "linux")]
+fn appliquer_maj(app: &AppHandle, f: &Path) -> Result<(), String> {
+    let actuel = match std::env::var("APPIMAGE") {
+        Ok(a) if !a.is_empty() => PathBuf::from(a),
+        _ => {
+            /* installé en .deb / .rpm : la mise à jour se fait par le paquet */
+            let _ = open::that(format!("{SITE}/portages-recomp-decomp/#telecharger"));
+            return Err(t("Nouvelle version disponible : installe le nouveau paquet.", "New version available: install the new package.", "Nueva versión disponible: instala el nuevo paquete."));
+        }
+    };
+    let neuf = actuel.with_extension("nouveau");
+    fs::copy(f, &neuf).map_err(es)?;
+    rendre_executable(&neuf);
+    fs::rename(&neuf, &actuel).map_err(es)?;
+    Command::new(&actuel).spawn().map_err(es)?;
+    app.exit(0);
+    Ok(())
+}
+#[cfg(target_os = "macos")]
+fn appliquer_maj(app: &AppHandle, f: &Path) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(es)?;
+    let paquet = exe.ancestors().find(|p| p.extension().map(|e| e == "app").unwrap_or(false)).map(|p| p.to_path_buf()).ok_or_else(|| "app".to_string())?;
+    let temp = racine().join("maj").join("app");
+    let _ = fs::remove_dir_all(&temp);
+    fs::create_dir_all(&temp).map_err(es)?;
+    let neuf = installer_dmg(f, &temp, "")?;
+    let _ = fs::remove_dir_all(&paquet);
+    let ok = Command::new("ditto").arg(&neuf).arg(&paquet).status().map(|s| s.success()).unwrap_or(false);
+    if !ok {
+        return Err(t("Mise à jour impossible : télécharge la nouvelle version sur retrogems.fr.", "Update failed: download the new version from retrogems.fr.", "Actualización imposible: descarga la nueva versión en retrogems.fr."));
+    }
+    Command::new("open").arg("-n").arg(&paquet).spawn().map_err(es)?;
+    app.exit(0);
+    Ok(())
+}
+
 /* ---------------------------------------------------------------- démarrage */
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -619,7 +709,7 @@ pub fn run() {
             let h_charge = h.clone();
             let adresse: Url = accueil().parse().expect("adresse");
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(adresse))
-                .title("RetroGems Launcher")
+                .title("RetroGems")
                 .inner_size(1360.0, 860.0)
                 .min_inner_size(960.0, 620.0)
                 .initialization_script(SCRIPT_PAGE)
@@ -655,6 +745,19 @@ pub fn run() {
                     gerer_lien(&h_lien, &u);
                 }
             });
+            /* v0.2.0 : mise à jour automatique, 20 s après l'ouverture puis toutes les 6 heures */
+            let h_maj = h.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(20));
+                loop {
+                    if let Err(e) = tauri::async_runtime::block_on(verifier_maj(h_maj.clone())) {
+                        if !e.is_empty() {
+                            progres(&h_maj, "__maj", "RetroGems", "erreur", 0.0, &e);
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(6 * 3600));
+                }
+            });
             if let Ok(Some(liens)) = app.deep_link().get_current() {
                 for u in liens {
                     gerer_lien(&h, &u);
@@ -663,5 +766,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("RetroGems Launcher n'a pas pu démarrer");
+        .expect("RetroGems n'a pas pu démarrer");
 }
