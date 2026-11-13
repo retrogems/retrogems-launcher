@@ -692,6 +692,19 @@ fn appliquer_maj(app: &AppHandle, f: &Path) -> Result<(), String> {
 /* ---------------------------------------------------------------- démarrage */
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// v0.2.3 : préférence graphique « Hautes performances » pour RetroGems.exe (Paramètres › Affichage › Graphiques), dans le registre de l'utilisateur.
+#[cfg(target_os = "windows")]
+fn gpu_performant() {
+    use std::os::windows::process::CommandExt;
+    if let Ok(exe) = std::env::current_exe() {
+        let chemin = exe.to_string_lossy().to_string();
+        let _ = std::process::Command::new("reg")
+            .args(["add", r"HKCU\Software\Microsoft\DirectX\UserGpuPreferences", "/v", chemin.as_str(), "/t", "REG_SZ", "/d", "GpuPreference=2;", "/f"])
+            .creation_flags(0x0800_0000)
+            .output();
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -708,7 +721,15 @@ pub fn run() {
             let h_nav = h.clone();
             let h_charge = h.clone();
             let adresse: Url = accueil().parse().expect("adresse");
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(adresse))
+            /* v0.2.3 : Windows doit donner la carte graphique performante à l'application (sinon les jeux du Studio tournent sur le circuit intégré) */
+            #[cfg(target_os = "windows")]
+            gpu_performant();
+            let fenetre = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(adresse));
+            /* v0.2.3 : WebView2 sur la carte graphique la plus puissante, sans ralentir la page quand la fenêtre est jugée cachée.
+               Les options par défaut de Tauri (msWebOOUI, msPdfOOUI, msSmartScreenProtection) sont reprises : elles sont remplacées dès qu'on en donne. */
+            #[cfg(target_os = "windows")]
+            let fenetre = fenetre.additional_browser_args("--force_high_performance_gpu --ignore-gpu-blocklist --disable-renderer-backgrounding --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion");
+            fenetre
                 .title("RetroGems")
                 .inner_size(1360.0, 860.0)
                 .min_inner_size(960.0, 620.0)
