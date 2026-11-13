@@ -32,7 +32,7 @@ jobs:
         run: |
           U="https://retrogems.fr/wp-json/retrogems/v1/launcher/projet/mario-kart-world-recompilation?lg=fr"
           A1="RetroGemsLauncher/0.1"
-          A2="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0 RetroGemsLauncher/0.1.4"
+          A2="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0 RetroGemsLauncher/0.1.5"
           c1=$(curl -s -o /dev/null -w "%{http_code}" -A "$A1" "$U" || true)
           c2=$(curl -s -o r2.json -w "%{http_code}" -A "$A2" -H "Accept: application/json" "$U" || true)
           echo "::warning::DIAG agent-programme=$c1 agent-navigateur=$c2 debut=$(head -c 60 r2.json | tr -d '\n\r\"')"
