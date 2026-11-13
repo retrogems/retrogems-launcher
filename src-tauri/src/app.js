@@ -1,5 +1,5 @@
 /* RetroGems Launcher : script ajouté à chaque page de retrogems.fr dans le programme.
-   Masque l'en-tête et le pied du site (l'interface du launcher suffit), affiche les téléchargements,
+   Garde l'en-tête et le pied du site, affiche les téléchargements,
    transforme « Installer » en « Jouer » pour les jeux installés et ouvre les liens externes dans le navigateur. */
 (function () {
   if (!/(^|\.)retrogems\.fr$/.test(location.hostname)) return;
@@ -10,8 +10,8 @@
   function langue() { var h = document.documentElement; var l = (h && h.getAttribute('lang')) || (/\/(en|es)\//.exec(location.pathname) || [])[1] || navigator.language || 'fr'; return String(l).slice(0, 2); }
   var L = langue();
   var T = function (fr, en, es) { return L === 'fr' ? fr : (L === 'es' ? es : en); };
-  var css = '#retrogems-header,.rghd-wrap,#retrogems-footer,#rg-mobile-nav,.rg-pwa-feuille,#rg-mobile-panel{display:none!important}'
-    + '.rgls-menu{height:100vh}.rgls-dlbox{display:none!important}'
+  /* v0.1.6 : l'en-tête et le pied du site restent affichés dans le programme ; seuls l'invitation à installer l'appli et les blocs de téléchargement du programme sont cachés */
+  var css = '.rg-pwa-feuille,.rgls-dlbox{display:none!important}'
     + '#rgapp{position:fixed;right:18px;bottom:18px;z-index:2147483000;display:flex;flex-direction:column;gap:10px;width:min(360px,calc(100vw - 36px));font-family:Quicksand,system-ui,sans-serif}'
     + '.rgapp-c{background:linear-gradient(160deg,#151b24,#0d1117);border:1px solid rgba(0,255,255,.4);border-radius:14px;padding:14px 16px;color:#e0e0e0;box-shadow:0 0 24px rgba(0,255,255,.18),0 18px 40px rgba(0,0,0,.6)}'
     + '.rgapp-c b{display:block;color:#fff;margin-bottom:4px}.rgapp-c p{margin:4px 0 0;font-size:.85rem;color:#c9d1d9;line-height:1.45}'
